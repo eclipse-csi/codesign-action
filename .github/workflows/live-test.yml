@@ -1,0 +1,147 @@
+# Signs test jars with SignPath through the action itself. Needs the SIGNPATH_API_TOKEN secret and
+# these repository variables, pointing at a project whose signing policy accepts this repository:
+#   SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_ID, SIGNPATH_SIGNING_POLICY,
+#   SIGNPATH_ARTIFACT_CONFIGURATION (signs one jar file),
+#   SIGNPATH_ZIP_ARTIFACT_CONFIGURATION (signs jars at the root of a zip file).
+name: Live test
+
+on:
+  push:
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  single-file:
+    name: Sign one file (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    permissions:
+      actions: read # SignPath downloads the file to sign, a workflow artifact, with GITHUB_TOKEN
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+
+    steps:
+      - name: Harden Runner
+        if: runner.os == 'Linux'
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          disable-sudo-and-containers: true
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # A single-file artifact is named after the file, and artifact names must be unique within
+      # a workflow run: hence one jar name per matrix entry.
+      - name: Create test jar
+        id: jar
+        shell: bash
+        env:
+          JAR: hello-${{ matrix.os }}.jar
+        run: |
+          mkdir -p work && echo "Hello from ${GITHUB_RUN_ID}" > work/hello.txt
+          jar --create --file "work/${JAR}" -C work hello.txt
+          echo "path=work/${JAR}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign
+        id: sign
+        # The action under test is the repository root, which the $/ syntax cannot name.
+        uses: ./ # zizmor: ignore[self-repository]
+        with:
+          files: ${{ steps.jar.outputs.path }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-id: ${{ vars.SIGNPATH_PROJECT_ID }}
+          signing-policy: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+          artifact-configuration: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION }}
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+
+      # jarsigner exits 0 for unsigned jars too, so look for its verdict. The test certificate is
+      # not trusted, which jarsigner only warns about.
+      - name: Verify signature
+        shell: bash
+        env:
+          SIGNED_FILES: ${{ steps.sign.outputs.signed-files }}
+          JAR: ${{ steps.jar.outputs.path }}
+        run: |
+          test "${SIGNED_FILES//\\//}" = "${JAR}" # paths use backslashes on Windows
+          jarsigner -verify "${JAR}" | tee verify.log
+          grep -q '^jar verified\.' verify.log
+
+  several-files:
+    name: Sign several files into an output directory
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      actions: read # SignPath downloads the files to sign, a workflow artifact, with GITHUB_TOKEN
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          disable-sudo-and-containers: true
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Create test jars
+        run: |
+          mkdir -p work/dist
+          for name in alpha beta; do
+            echo "${name} from ${GITHUB_RUN_ID}" > work/hello.txt
+            jar --create --file "work/dist/${name}.jar" -C work hello.txt
+          done
+
+      - name: Sign
+        id: sign
+        uses: ./ # zizmor: ignore[self-repository]
+        with:
+          files: work/dist/*.jar
+          output-dir: work/signed
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-id: ${{ vars.SIGNPATH_PROJECT_ID }}
+          signing-policy: ${{ vars.SIGNPATH_SIGNING_POLICY }}
+          artifact-configuration: ${{ vars.SIGNPATH_ZIP_ARTIFACT_CONFIGURATION }}
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+
+      - name: Verify signatures
+        env:
+          SIGNED_FILES: ${{ steps.sign.outputs.signed-files }}
+        run: |
+          test "${SIGNED_FILES}" = "$(printf 'work/signed/alpha.jar\nwork/signed/beta.jar')"
+          for jar in work/signed/alpha.jar work/signed/beta.jar; do
+            jarsigner -verify "${jar}" | tee verify.log
+            grep -q '^jar verified\.' verify.log
+          done
+          # The inputs stay unsigned.
+          jarsigner -verify work/dist/alpha.jar | grep -q '^jar is unsigned\.'

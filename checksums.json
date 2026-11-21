@@ -1,0 +1,11 @@
+{
+  "default": "0.10.1",
+  "versions": {
+    "0.10.1": {
+      "linux-x86_64": "97e16793d37269c0dd79171bf257194ad299276d1d44b8c56a4492bde3b834d2",
+      "linux-aarch_64": "738068fe62e8e0aa54507c7ea77a44c363988fbd65b54c0d584d4e4f3081e208",
+      "osx-aarch_64": "8c929c357b6210122d4078e66bf90583ce764bfbf48c93a0532e1df780ae947e",
+      "windows-x86_64": "0eb620529fc808db781a902aa94083ee1fb70fcd45c922d67cdfd271fc630ba3"
+    }
+  }
+}

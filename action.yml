@@ -1,0 +1,75 @@
+name: Eclipse CSI Codesign
+description: >-
+  Sign files with SignPath through its GitHub trusted build system, as required by Eclipse
+  Foundation signing policies.
+author: Eclipse Foundation
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  files:
+    description: >-
+      Files to sign, one path or glob pattern per line, relative to the workspace. Every line must
+      match at least one file. A single file is sent to SignPath as is; several files are signed
+      in one request, packed at the root of a zip file, so they need distinct names and an
+      artifact configuration with a <zip-file> root element.
+    required: true
+  organization-id:
+    description: SignPath organization ID.
+    required: true
+  project-id:
+    description: SignPath project slug.
+    required: true
+  signing-policy:
+    description: SignPath signing policy slug (e.g. test-signing or release-signing).
+    required: true
+  artifact-configuration:
+    description: >-
+      SignPath artifact configuration slug. Defaults to the project's default artifact
+      configuration.
+    required: false
+  api-token:
+    description: >-
+      API token of the SignPath CI user that submits the signing request. Pass it from a secret.
+    required: true
+  github-token:
+    description: >-
+      Token SignPath uses to read the workflow run and download the files to sign. It needs the
+      `actions: read` permission.
+    required: false
+    default: ${{ github.token }}
+  output-dir:
+    description: >-
+      Directory to write the signed files to, under their original names. When empty, the files
+      are signed in place.
+    required: false
+  params:
+    description: >-
+      User-defined parameters of the artifact configuration, one key=value per line. SignPath
+      ignores parameters that the artifact configuration does not declare.
+    required: false
+  timeout:
+    description: >-
+      Seconds to wait for the signing request to complete, e.g. while it waits for approval.
+      Defaults to the csi-codesign default (600).
+    required: false
+  cli-version:
+    description: >-
+      Version of csi-codesign to run. Defaults to the version this release of the action was
+      built and verified with. Only versions whose checksums the action knows are accepted.
+    required: false
+  verbose:
+    description: >-
+      Make csi-codesign verbose: it then shows its derived timing parameters and download
+      progress (true or false). Also enabled when the job runs with debug logging.
+    required: false
+    default: 'false'
+
+outputs:
+  signed-files:
+    description: Paths of the signed files, one per line.
+
+runs:
+  using: node24
+  main: index.js

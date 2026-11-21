@@ -1,0 +1,13 @@
+{
+  "name": "codesign-action",
+  "private": true,
+  "description": "GitHub Action that signs files with SignPath through its GitHub trusted build system.",
+  "license": "EPL-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node scripts/smoke-install.js"
+  }
+}

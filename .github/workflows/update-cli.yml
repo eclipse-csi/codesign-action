@@ -1,0 +1,74 @@
+# Opens a pull request that makes the latest csi-codesign release the action's default, once its
+# archives pass build provenance verification (see scripts/update-checksums.js).
+name: Update csi-codesign
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: csi-codesign version (e.g. 0.10.1); empty for the latest release
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update:
+    name: Update checksums.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write # pushes the update branch
+      pull-requests: write # opens the pull request
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          disable-sudo-and-containers: true
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Verify the release and update checksums.json
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: node scripts/update-checksums.js ${VERSION:+"$VERSION"}
+
+      - name: Open pull request
+        if: steps.update.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.update.outputs.version }}
+        run: |
+          branch="update-cli/v${VERSION}"
+          if git ls-remote --exit-code --heads origin "${branch}" > /dev/null; then
+            echo "Branch ${branch} already exists; nothing to do."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "${branch}"
+          git commit -am "build: update csi-codesign to ${VERSION}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)" \
+            push origin "${branch}"
+          gh pr create --base main --head "${branch}" \
+            --title "build: update csi-codesign to ${VERSION}" \
+            --body "Makes [csi-codesign ${VERSION}](https://github.com/eclipse-csi/codesign-tools/releases/tag/v${VERSION}) the default version of the action. Its archives passed \`gh attestation verify\` (built by the release workflow of eclipse-csi/codesign-tools from tag \`v${VERSION}\`) and match the release's \`checksums_sha256.txt\`."
