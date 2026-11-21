@@ -1,8 +1,4 @@
-# Signs test jars with SignPath through the action itself. Needs the SIGNPATH_API_TOKEN secret and
-# these repository variables, pointing at a project whose signing policy accepts this repository:
-#   SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_ID, SIGNPATH_SIGNING_POLICY,
-#   SIGNPATH_ARTIFACT_CONFIGURATION (signs one jar file),
-#   SIGNPATH_ZIP_ARTIFACT_CONFIGURATION (signs jars at the root of a zip file).
+# Signs test jars with SignPath through the action itself. Needs the SIGNPATH_API_TOKEN secret.
 name: Live test
 
 on:
@@ -69,10 +65,10 @@ jobs:
         uses: ./ # zizmor: ignore[self-repository]
         with:
           files: ${{ steps.jar.outputs.path }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-id: ${{ vars.SIGNPATH_PROJECT_ID }}
-          signing-policy: ${{ vars.SIGNPATH_SIGNING_POLICY }}
-          artifact-configuration: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION }}
+          organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
+          project-id: technology.csi
+          signing-policy: test-signing
+          artifact-configuration: jar-in-zip
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
 
       # jarsigner exits 0 for unsigned jars too, so look for its verdict. The test certificate is
@@ -128,10 +124,10 @@ jobs:
         with:
           files: work/dist/*.jar
           output-dir: work/signed
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-id: ${{ vars.SIGNPATH_PROJECT_ID }}
-          signing-policy: ${{ vars.SIGNPATH_SIGNING_POLICY }}
-          artifact-configuration: ${{ vars.SIGNPATH_ZIP_ARTIFACT_CONFIGURATION }}
+          organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
+          project-id: technology.csi
+          signing-policy: test-signing
+          artifact-configuration: jar-in-zip
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
 
       - name: Verify signatures
