@@ -68,7 +68,7 @@ jobs:
           organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
           project-id: technology.csi
           signing-policy: test-signing
-          artifact-configuration: jar-in-zip
+          artifact-configuration: jar-file
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
 
       # jarsigner exits 0 for unsigned jars too, so look for its verdict. The test certificate is
