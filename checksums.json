@@ -1,6 +1,12 @@
 {
-  "default": "0.11.0",
+  "default": "0.12.0",
   "versions": {
+    "0.12.0": {
+      "linux-x86_64": "afcf3a5d3dddddc8ee64026b3fcf9bb819cf829c38824fec5d209f8e0898f626",
+      "linux-aarch_64": "8a76ffd4c56d8716636b695a597b7aec6841d006fffc9d5b81a05dbd723401fe",
+      "osx-aarch_64": "77a7287c72000a1d62dda642a2b7b452ce6cf770d8d2652813e5699903ad694d",
+      "windows-x86_64": "f073f21d51d607b58d281baaa9a53482e126b570d7a812002908458002f30746"
+    },
     "0.11.0": {
       "linux-x86_64": "8b86f00e81773aa41d8969ea108305f580fb8c800b5b56431dafd888d66cd0fe",
       "linux-aarch_64": "e31a63c1d8451c8590f9e838cd7f644df3d9d615653cb419af6013887cb1f268",
