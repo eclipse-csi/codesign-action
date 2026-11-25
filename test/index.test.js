@@ -258,7 +258,7 @@ describe('installCli', () => {
     assert.equal(path.basename(first), binary);
     assert.equal(fs.readFileSync(first, 'utf8'), '#!/bin/sh\necho fake\n');
     if (!windows) {
-      assert.equal(fs.statSync(first).mode & 0o111, 0o111);
+      assert.equal(fs.statSync(first).mode & 0o777, 0o700);
     }
     assert.equal(downloads.length, 1);
     assert.match(downloads[0], /\/v1\.2\.3\/csi-codesign-1\.2\.3-/);
