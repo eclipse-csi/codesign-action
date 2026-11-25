@@ -1,7 +1,7 @@
 {
   "name": "codesign-action",
   "private": true,
-  "description": "GitHub Action that signs files with SignPath through its GitHub trusted build system.",
+  "description": "GitHub Actions that sign files with SignPath through its GitHub trusted build system, and sign and notarize for macOS.",
   "license": "EPL-2.0",
   "engines": {
     "node": ">=24"

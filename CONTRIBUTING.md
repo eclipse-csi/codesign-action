@@ -11,9 +11,11 @@ Before your contribution can be accepted, you must electronically sign the
 
 ## Development
 
-The action is a single dependency-free script, [`index.js`](index.js), run by the `node24`
-runtime of GitHub Actions. Keep it dependency-free: a dependency would need a bundled `dist/`
-and would add an npm supply chain to every workflow that signs with this action.
+The repository holds two actions, both run by the `node24` runtime of GitHub Actions:
+[`index.js`](index.js) signs through SignPath's GitHub trusted build system, and
+[`macos/index.js`](macos/index.js) signs and notarizes for macOS. What they share is in
+[`lib/`](lib/). Keep them dependency-free: a dependency would need a bundled `dist/` and would
+add an npm supply chain to every workflow that signs with these actions.
 
 ```bash
 node --test                      # unit tests (Node.js 24 or later)
@@ -24,6 +26,12 @@ prek install                     # git hooks, see prek.toml
 The [Live test](.github/workflows/live-test.yml) workflow signs jars through SignPath with the
 action itself. It needs the `SIGNPATH_API_TOKEN` secret and the repository variables listed at
 the top of the workflow.
+
+The [Live test (macOS)](.github/workflows/live-test-macos.yml) workflow signs and notarizes
+sample files with the macOS action. It only runs by hand, because each run makes Developer ID
+signatures and notarization submissions. It needs the `SIGNPATH_API_TOKEN` secret and the
+`APPLE_NOTARIZATION_ASC_*` secrets listed at the top of the workflow. Run it before a release
+that changes the macOS action or the default `csi-codesign` version.
 
 ## Updating csi-codesign
 
@@ -43,7 +51,7 @@ request, or push to its branch, to run the CI before merging.
 
 ## Releasing
 
-1. Make sure the CI and the live test pass on `main`.
+1. Make sure the CI and the live test pass on `main`, and run the macOS live test.
 2. Tag the release with a signed tag, e.g. `git tag -s v1.2.0 -m v1.2.0`, and push it.
 3. Move the major version tag: `git tag -fs v1 -m v1.2.0 v1.2.0^{}` and
    `git push -f origin v1`.

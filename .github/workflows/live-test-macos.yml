@@ -1,0 +1,149 @@
+# Signs and notarizes sample macOS files with the macos action itself, with the Eclipse
+# Foundation's Developer ID certificates: an app (with a nested helper) and a command-line tool,
+# the disk image of the app and an installer package of it. Run by hand only: each run makes
+# Developer ID signatures and notarization submissions. Nothing is published.
+#
+# Needs the SIGNPATH_API_TOKEN secret, and the APPLE_NOTARIZATION_ASC_KEY_P8_BASE64,
+# APPLE_NOTARIZATION_ASC_KEY_ID and APPLE_NOTARIZATION_ASC_ISSUER_ID secrets of an App Store
+# Connect API key.
+name: Live test (macOS)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  sign-and-notarize:
+    name: Sign and notarize samples
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the samples
+        run: |
+          app=build/Sample.app
+          mkdir -p "${app}/Contents/MacOS"
+          cat > "${app}/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key><string>Sample</string>
+              <key>CFBundleIdentifier</key><string>org.eclipse.csi.codesign.action.sample</string>
+              <key>CFBundleName</key><string>Sample</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>CFBundleShortVersionString</key><string>1.0</string>
+          </dict>
+          </plist>
+          EOF
+          echo 'print("Sample app signed by the Eclipse CSI codesign action tests.")' > build/main.swift
+          swiftc -O -o "${app}/Contents/MacOS/Sample" build/main.swift
+          # Nested code, which must be signed before the bundle that contains it.
+          echo 'print("Helper of the sample app.")' > build/helper.swift
+          swiftc -O -o "${app}/Contents/MacOS/helper" build/helper.swift
+          echo 'print("Sample command-line tool.")' > build/tool.swift
+          swiftc -O -o build/sample-tool build/tool.swift
+
+      # A bundle and a file, copied to an output directory, without notarization.
+      - name: Sign the app and the tool
+        id: sign-app
+        uses: $/macos
+        with:
+          files: |
+            build/Sample.app
+            build/sample-tool
+          output-dir: signed
+          organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
+          project-id: technology.csi
+          signing-policy: apple-application-release
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          verbose: true
+
+      - name: Create the disk image
+        run: hdiutil create -quiet -format UDZO -volname Sample -srcfolder signed/Sample.app signed/Sample.dmg
+
+      # Signed in place. Notarization covers the app inside the disk image; the ticket is stapled
+      # to the disk image.
+      - name: Sign and notarize the disk image
+        id: sign-dmg
+        uses: $/macos
+        with:
+          files: signed/Sample.dmg
+          organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
+          project-id: technology.csi
+          signing-policy: apple-application-release
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          notarize: true
+          notary-key: ${{ secrets.APPLE_NOTARIZATION_ASC_KEY_P8_BASE64 }}
+          notary-key-id: ${{ secrets.APPLE_NOTARIZATION_ASC_KEY_ID }}
+          notary-issuer: ${{ secrets.APPLE_NOTARIZATION_ASC_ISSUER_ID }}
+          verbose: true
+
+      - name: Create the installer package
+        run: pkgbuild --quiet --component signed/Sample.app --install-location /Applications build/Sample.pkg
+
+      # A signing policy has a single certificate: the installer package is signed with the
+      # Developer ID Installer certificate of another policy.
+      - name: Sign and notarize the installer package
+        id: sign-pkg
+        uses: $/macos
+        with:
+          files: build/Sample.pkg
+          output-dir: signed
+          organization-id: 46624a66-6595-48fd-85c3-64bdee7fecc9
+          project-id: technology.csi
+          signing-policy: apple-installer-release
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          notarize: true
+          notary-key: ${{ secrets.APPLE_NOTARIZATION_ASC_KEY_P8_BASE64 }}
+          notary-key-id: ${{ secrets.APPLE_NOTARIZATION_ASC_KEY_ID }}
+          notary-issuer: ${{ secrets.APPLE_NOTARIZATION_ASC_ISSUER_ID }}
+          verbose: true
+
+      - name: Check the outputs
+        env:
+          APP_SIGNED_FILES: ${{ steps.sign-app.outputs.signed-files }}
+          DMG_SIGNED_FILES: ${{ steps.sign-dmg.outputs.signed-files }}
+          PKG_SIGNED_FILES: ${{ steps.sign-pkg.outputs.signed-files }}
+        run: |
+          test "${APP_SIGNED_FILES}" = "$(printf 'signed/Sample.app\nsigned/sample-tool')"
+          test "${DMG_SIGNED_FILES}" = signed/Sample.dmg
+          test "${PKG_SIGNED_FILES}" = signed/Sample.pkg
+
+      - name: Check the signatures
+        run: |
+          for file in signed/Sample.app signed/Sample.app/Contents/MacOS/helper signed/sample-tool signed/Sample.dmg; do
+            details=$(codesign -dvv "${file}" 2>&1)
+            echo "${details}"
+            grep -q '^Authority=Developer ID Application:' <<< "${details}" \
+              || { echo "::error::${file} is not signed with a Developer ID Application certificate"; exit 1; }
+            grep -q '^Timestamp=' <<< "${details}" \
+              || { echo "::error::${file} has no secure timestamp"; exit 1; }
+          done
+          pkgutil --check-signature signed/Sample.pkg | tee pkg-signature.txt
+          grep -q 'Developer ID Installer:' pkg-signature.txt \
+            || { echo "::error::Sample.pkg is not signed with a Developer ID Installer certificate"; exit 1; }
+          # The inputs copied to the output directory stay unsigned.
+          if codesign -dvv build/Sample.app 2>&1 | grep -q '^Authority=Developer ID'; then
+            echo "::error::build/Sample.app was signed in place"; exit 1
+          fi
+
+      - name: Check the notarization tickets
+        run: |
+          xcrun stapler validate signed/Sample.dmg
+          xcrun stapler validate signed/Sample.pkg
+          spctl --assess --type open --context context:primary-signature --verbose=2 signed/Sample.dmg
+          spctl --assess --type install --verbose=2 signed/Sample.pkg

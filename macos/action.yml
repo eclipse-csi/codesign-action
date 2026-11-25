@@ -1,0 +1,116 @@
+name: Eclipse CSI Codesign for macOS
+description: >-
+  Sign macOS apps, binaries, disk images and installer packages with the Developer ID certificate
+  of a SignPath signing policy, and optionally notarize them with Apple.
+author: Eclipse Foundation
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  files:
+    description: >-
+      What to sign, one path or glob pattern per line, relative to the workspace: bundles (.app,
+      .framework...), Mach-O binaries, disk images (.dmg) or installer packages (.pkg). Every
+      line must match at least one file or directory. They are signed in the order given.
+    required: true
+  organization-id:
+    description: SignPath organization ID.
+    required: true
+  project-id:
+    description: >-
+      SignPath project slug. Its default artifact configuration must be of type "hash signing
+      data".
+    required: true
+  signing-policy:
+    description: >-
+      SignPath signing policy slug. The policy must have neither trusted build system
+      verification nor origin verification: SignPath refuses hash signing under such policies.
+    required: true
+  api-token:
+    description: >-
+      API token of the SignPath CI user that submits the signing requests. Pass it from a secret.
+    required: true
+  identity:
+    description: >-
+      Code signing identity (Developer ID Application certificate): a part of its name, or the
+      SHA-1 hash of the certificate. Defaults to the certificate of the signing policy.
+    required: false
+  installer-identity:
+    description: >-
+      Installer signing identity (Developer ID Installer certificate) for .pkg files. Defaults to
+      the certificate of the signing policy.
+    required: false
+  entitlements:
+    description: >-
+      Entitlements file (property list) of the top-level bundles and binaries. Nested code is
+      signed without entitlements.
+    required: false
+  output-dir:
+    description: >-
+      Directory to copy the inputs to before signing them, under their original names. When
+      empty, they are signed in place.
+    required: false
+  identity-timeout:
+    description: >-
+      Seconds to wait for the SignPath CryptoTokenKit to publish the signing identity. Defaults
+      to the csi-codesign default (60).
+    required: false
+  signing-timeout:
+    description: >-
+      Seconds each codesign or productsign call may take, while SignPath signs each hash.
+      Defaults to the csi-codesign default (300).
+    required: false
+  ctk-sha256:
+    description: >-
+      Expected SHA-256 of the SignPath CryptoTokenKit disk image that csi-codesign downloads. Its
+      Developer ID signature by SignPath GmbH is checked in any case.
+    required: false
+  notarize:
+    description: >-
+      Submit the signed files to Apple's notary service, staple the tickets and check the result
+      with Gatekeeper (true or false).
+    required: false
+    default: 'false'
+  notary-key:
+    description: >-
+      App Store Connect API private key: the content of the .p8 file, or its base64 encoding.
+      Pass it from a secret. Required when notarize is true.
+    required: false
+  notary-key-id:
+    description: App Store Connect API key ID. Required when notarize is true.
+    required: false
+  notary-issuer:
+    description: App Store Connect API issuer ID. Team keys need it, individual keys do not.
+    required: false
+  notarize-timeout:
+    description: >-
+      Seconds to wait for Apple to process each submission. Defaults to the csi-codesign default
+      (1800).
+    required: false
+  staple:
+    description: >-
+      Staple the notarization ticket to the notarized files (true or false). Only used when
+      notarize is true.
+    required: false
+    default: 'true'
+  cli-version:
+    description: >-
+      Version of csi-codesign to run, 0.12.0 or later. Defaults to the version this release of
+      the action was built and verified with. Only versions whose checksums the action knows are
+      accepted.
+    required: false
+  verbose:
+    description: >-
+      Make csi-codesign verbose: it then shows each codesign and notarytool invocation (true or
+      false). Also enabled when the job runs with debug logging.
+    required: false
+    default: 'false'
+
+outputs:
+  signed-files:
+    description: Paths of the signed files and bundles, one per line.
+
+runs:
+  using: node24
+  main: index.js
